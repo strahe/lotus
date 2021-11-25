@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ipfs/go-cid"
@@ -43,6 +45,12 @@ var sendCsvCmd = &cli.Command{
 		defer closer()
 		ctx := lcli.ReqContext(cctx)
 
+		srv, err := lcli.GetFullNodeServices(cctx)
+		if err != nil {
+			return err
+		}
+		defer srv.Close() //nolint:errcheck
+
 		sender, err := address.NewFromString(cctx.String("from"))
 		if err != nil {
 			return err
@@ -60,8 +68,11 @@ var sendCsvCmd = &cli.Command{
 			return xerrors.Errorf("read csv: %w", err)
 		}
 
-		if strings.TrimSpace(records[0][0]) != "Recipient" || strings.TrimSpace(records[0][1]) != "FIL" {
-			return xerrors.Errorf("expected header row to be \"Recipient, FIL\"")
+		if strings.TrimSpace(records[0][0]) != "Recipient" ||
+			strings.TrimSpace(records[0][1]) != "FIL" ||
+			strings.TrimSpace(records[0][2]) != "Method" ||
+			strings.TrimSpace(records[0][3]) != "Params" {
+			return xerrors.Errorf("expected header row to be \"Recipient, FIL, Method, Params\"")
 		}
 
 		var msgs []*types.Message
@@ -76,18 +87,38 @@ var sendCsvCmd = &cli.Command{
 				return xerrors.Errorf("failed to parse value balance: %w", err)
 			}
 
+			method, err := strconv.Atoi(strings.TrimSpace(e[2]))
+			if err != nil {
+				return xerrors.Errorf("failed to parse method number: %w", err)
+			}
+
+			var params []byte
+			if strings.TrimSpace(e[3]) != "nil" {
+				params, err = hex.DecodeString(strings.TrimSpace(e[3]))
+				if err != nil {
+					return xerrors.Errorf("failed to parse hexparams: %w", err)
+				}
+			}
+
 			msgs = append(msgs, &types.Message{
-				To:    addr,
-				From:  sender,
-				Value: abi.TokenAmount(value),
+				To:     addr,
+				From:   sender,
+				Value:  abi.TokenAmount(value),
+				Method: abi.MethodNum(method),
+				Params: params,
 			})
+		}
+
+		if len(msgs) == 0 {
+			return nil
 		}
 
 		var msgCids []cid.Cid
 		for i, msg := range msgs {
 			smsg, err := api.MpoolPushMessage(ctx, msg, nil)
 			if err != nil {
-				return err
+				fmt.Printf("error pushing message to send %s to %s (error %s)\n", msg.Value.String(), msg.To, err)
+				continue
 			}
 
 			fmt.Printf("sending %s to %s in msg %s\n", msg.Value.String(), msg.To, smsg.Cid())
@@ -103,7 +134,7 @@ var sendCsvCmd = &cli.Command{
 			msgCids = append(msgCids, smsg.Cid())
 		}
 
-		fmt.Println("waiting on messages")
+		fmt.Println("waiting on messages...")
 
 		for _, msgCid := range msgCids {
 			ml, err := api.StateWaitMsg(ctx, msgCid, 5, lapi.LookbackNoLimit, true)
@@ -115,6 +146,7 @@ var sendCsvCmd = &cli.Command{
 			}
 		}
 
+		fmt.Println("all sent messages succeeded")
 		return nil
 	},
 }
