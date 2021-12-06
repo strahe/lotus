@@ -951,7 +951,11 @@ func (syncer *Syncer) syncMessagesAndCheckState(ctx context.Context, headers []*
 
 		stats.Record(ctx, metrics.ChainNodeWorkerHeight.M(int64(fts.TipSet().Height())))
 		ss.SetHeight(fts.TipSet().Height())
-
+		if len(headers) > 1000 { // Save point in advance to prevent synchronization failures midway
+			if err := syncer.store.PutTipSet(ctx, fts.TipSet()); err != nil {
+				return xerrors.Errorf("failed to put synced tipset to chainstore: %w", err)
+			}
+		}
 		return nil
 	})
 }
