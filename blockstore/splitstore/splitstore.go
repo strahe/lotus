@@ -611,3 +611,11 @@ func (s *SplitStore) setBaseEpoch(epoch abi.ChainEpoch) error {
 	s.baseEpoch = epoch
 	return s.ds.Put(s.ctx, baseEpochKey, epochToBytes(epoch))
 }
+
+func (s *SplitStore) HotBlockStore() bstore.Blockstore  {
+	return s.hot.(bstore.Blockstore)
+}
+
+func (s *SplitStore) ColdBlockStore() bstore.Blockstore  {
+	return s.cold.(bstore.Blockstore)
+}

@@ -1108,6 +1108,10 @@ func (cs *ChainStore) ActorStore(ctx context.Context) adt.Store {
 	return ActorStore(ctx, cs.stateBlockstore)
 }
 
+func (cs *ChainStore) ChainAdtStore(ctx context.Context) adt.Store {
+	return adt.WrapStore(ctx, cbor.NewCborStore(cs.chainLocalBlockstore))
+}
+
 func (cs *ChainStore) TryFillTipSet(ctx context.Context, ts *types.TipSet) (*FullTipSet, error) {
 	var out []*types.FullBlock
 

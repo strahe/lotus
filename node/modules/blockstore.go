@@ -70,6 +70,29 @@ func BadgerHotBlockstore(lc fx.Lifecycle, r repo.LockedRepo) (dtypes.HotBlocksto
 	return bs, nil
 }
 
+func BadgerStateBlockstore(lc fx.Lifecycle, r repo.LockedRepo) (dtypes.BasicStateBlockstore, error) {
+	path := filepath.Join(r.Path(), "datastore", "state")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return nil, err
+	}
+
+	opts := badgerbs.DefaultOptions(path)
+	opts.ReadOnly = r.Readonly()
+
+	bs, err := badgerbs.Open(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(_ context.Context) error {
+			return bs.Close()
+		}})
+
+	return bs, nil
+}
+
+
 func SplitBlockstore(cfg *config.Chainstore) func(lc fx.Lifecycle, r repo.LockedRepo, ds dtypes.MetadataDS, cold dtypes.ColdBlockstore, hot dtypes.HotBlockstore) (dtypes.SplitBlockstore, error) {
 	return func(lc fx.Lifecycle, r repo.LockedRepo, ds dtypes.MetadataDS, cold dtypes.ColdBlockstore, hot dtypes.HotBlockstore) (dtypes.SplitBlockstore, error) {
 		path, err := r.SplitstorePath()

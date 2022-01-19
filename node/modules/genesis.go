@@ -2,6 +2,9 @@ package modules
 
 import (
 	"bytes"
+	"context"
+	"github.com/filecoin-project/lotus/blockstore"
+	"golang.org/x/sync/errgroup"
 	"os"
 
 	"go.uber.org/fx"
@@ -22,29 +25,51 @@ func ErrorGenesis() Genesis {
 	}
 }
 
-func LoadGenesis(genBytes []byte) func(fx.Lifecycle, helpers.MetricsCtx, dtypes.ChainBlockstore) Genesis {
-	return func(lc fx.Lifecycle, mctx helpers.MetricsCtx, bs dtypes.ChainBlockstore) Genesis {
+func LoadGenesis(genBytes []byte) func(fx.Lifecycle, helpers.MetricsCtx, dtypes.ChainBlockstore, dtypes.StateBlockstore) Genesis {
+	return func(lc fx.Lifecycle, mctx helpers.MetricsCtx, bs dtypes.ChainBlockstore, ss dtypes.StateBlockstore) Genesis {
 		return func() (header *types.BlockHeader, e error) {
 			ctx := helpers.LifecycleCtx(mctx, lc)
-			c, err := car.LoadCar(ctx, bs, bytes.NewReader(genBytes))
-			if err != nil {
-				return nil, xerrors.Errorf("loading genesis car file failed: %w", err)
-			}
-			if len(c.Roots) != 1 {
-				return nil, xerrors.New("expected genesis file to have one root")
-			}
-			root, err := bs.Get(ctx, c.Roots[0])
-			if err != nil {
-				return nil, err
-			}
-
-			h, err := types.DecodeBlock(root.RawData())
-			if err != nil {
-				return nil, xerrors.Errorf("decoding block failed: %w", err)
-			}
-			return h, nil
+			genBytes2 := make([]byte, len(genBytes))
+			copy(genBytes2, genBytes)
+			grp, _ := errgroup.WithContext(context.TODO())
+			grp.Go(func() error {
+				h, err := loadGenesis(ctx, bs, genBytes)
+				if err == nil {
+					header = h
+				}
+				return err
+			})
+			grp.Go(func() error {
+				h, err := loadGenesis(ctx, ss, genBytes2)
+				if err == nil {
+					header = h
+				}
+				return err
+			})
+			e = grp.Wait()
+			return
 		}
 	}
+}
+
+func loadGenesis(ctx context.Context, bs blockstore.Blockstore, genBytes []byte) (header *types.BlockHeader, e error) {
+	c, err := car.LoadCar(ctx, bs, bytes.NewReader(genBytes))
+	if err != nil {
+		return nil, xerrors.Errorf("loading genesis car file failed: %w", err)
+	}
+	if len(c.Roots) != 1 {
+		return nil, xerrors.New("expected genesis file to have one root")
+	}
+	root, err := bs.Get(ctx, c.Roots[0])
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := types.DecodeBlock(root.RawData())
+	if err != nil {
+		return nil, xerrors.Errorf("decoding block failed: %w", err)
+	}
+	return h, nil
 }
 
 func DoSetGenesis(_ dtypes.AfterGenesisSet) {}

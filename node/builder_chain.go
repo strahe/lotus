@@ -198,6 +198,8 @@ func ConfigFullNode(c interface{}) Option {
 			Override(new(dtypes.ExposedBlockstore), From(new(dtypes.UniversalBlockstore))),
 			Override(new(dtypes.GCReferenceProtector), modules.NoopGCReferenceProtector),
 		),
+		If(os.Getenv("LOTUS_SEPARATE_CHAINSTORE_STATESTORE") == "1",
+			Override(new(dtypes.BasicStateBlockstore), modules.BadgerStateBlockstore)),
 
 		Override(new(dtypes.ChainBlockstore), From(new(dtypes.BasicChainBlockstore))),
 		Override(new(dtypes.StateBlockstore), From(new(dtypes.BasicStateBlockstore))),

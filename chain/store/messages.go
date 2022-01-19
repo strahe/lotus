@@ -73,7 +73,7 @@ func (cs *ChainStore) GetSignedMessage(ctx context.Context, c cid.Cid) (*types.S
 func (cs *ChainStore) readAMTCids(root cid.Cid) ([]cid.Cid, error) {
 	ctx := context.TODO()
 	// block headers use adt0, for now.
-	a, err := blockadt.AsArray(cs.ActorStore(ctx), root)
+	a, err := blockadt.AsArray(cs.ChainAdtStore(ctx), root)
 	if err != nil {
 		return nil, xerrors.Errorf("amt load: %w", err)
 	}
@@ -258,7 +258,7 @@ func (cs *ChainStore) MessagesForBlock(ctx context.Context, b *types.BlockHeader
 
 func (cs *ChainStore) GetParentReceipt(ctx context.Context, b *types.BlockHeader, i int) (*types.MessageReceipt, error) {
 	// block headers use adt0, for now.
-	a, err := blockadt.AsArray(cs.ActorStore(ctx), b.ParentMessageReceipts)
+	a, err := blockadt.AsArray(cs.ChainAdtStore(ctx), b.ParentMessageReceipts)
 	if err != nil {
 		return nil, xerrors.Errorf("amt load: %w", err)
 	}
